@@ -84,9 +84,9 @@ def match(limit=None, minutes=None):
     todo = [k for k in priority_order(cat)
             if k not in matches or matches[k]["status"] == "error"
             or (matches[k]["status"] == "none" and matches[k].get("at", "") < cutoff)]
+    log(f"{len(todo)} tracks to search ({len(cat) - len(todo)} already done)")
     if limit:
         todo = todo[:limit]
-    log(f"{len(todo)} tracks to search ({len(cat) - len(todo)} already done)")
     if not todo:
         return 0
     try:

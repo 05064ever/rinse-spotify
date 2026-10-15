@@ -178,13 +178,16 @@ class Spotify:
 
 VERSION_RX = re.compile(r"[\(\[]([^\)\]]*)[\)\]]")
 NEUTRAL = re.compile(r"^(original( mix| version)?|extended( mix| version)?|club mix|album version|radio edit|"
-                     r"edit|single( version| edit)?|short edit|clean|explicit|main mix|"
+                     r"edit|single( version| edit)?|short edit|(clean|explicit|dirty)( version| edit)?|main mix|"
                      r"remaster(ed)?( \d{4})?|\d{4} remaster(ed)?|mixed|vocal mix|instrumental)$")
 
 
 def split_title(title):
     """'Song (X Remix) [Extended]' -> ('song', ['x remix', 'extended'])"""
     t = title.replace("–", "-")
+    # drop featured-artist clauses, with or without brackets: "Song ft X", "Song (feat. X)"
+    t = re.sub(r"\s*[\(\[]\s*(feat\.?|ft\.?|featuring)\s[^\)\]]*[\)\]]", "", t, flags=re.I)
+    t = re.sub(r"\s+(feat\.?|ft\.?|featuring)\s.*?(?=\s[\(\[-]|$)", "", t, flags=re.I)
     # Spotify style "Song - X Remix"
     parts = t.split(" - ")
     versions = [norm(v) for v in VERSION_RX.findall(t)]
