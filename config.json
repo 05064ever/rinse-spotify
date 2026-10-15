@@ -1,0 +1,10 @@
+{
+ "since": "2018-10-16",
+ "mixesdb_category": "Rinse FM",
+ "include_tracklist_status": ["complete", "incomplete"],
+ "playlist_prefix": "Rinse FM ·",
+ "monthly_playlists_from": "2026-09",
+ "redirect_uri": "http://127.0.0.1:8888/callback",
+ "scopes": "playlist-read-private playlist-modify-private playlist-modify-public",
+ "playlists_public": false
+}
