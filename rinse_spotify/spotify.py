@@ -31,13 +31,15 @@ class AuthExpired(Exception):
 # ---------------- credentials ----------------
 
 def load_secrets():
+    """Environment variables first; the local secrets file (if any) overrides them, because it
+    holds the newest refresh token when Spotify rotates it during a run."""
     s = {}
-    if os.path.exists(SECRETS_PATH):
-        with open(SECRETS_PATH) as f:
-            s = json.load(f)
     for k in ("SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET", "SPOTIFY_REFRESH_TOKEN"):
         if os.environ.get(k):
             s[k] = os.environ[k].strip()
+    if os.path.exists(SECRETS_PATH):
+        with open(SECRETS_PATH) as f:
+            s.update({k: v for k, v in json.load(f).items() if v})
     return s
 
 
