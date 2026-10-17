@@ -15,6 +15,7 @@ Exit codes: 0 ok, 3 Spotify quota exhausted (resume later), 4 Spotify auth missi
 """
 import csv
 import os
+import re
 import subprocess
 import sys
 import time
@@ -246,6 +247,74 @@ def export():
         log(f"wrote {path} ({len(rs)} rows)")
 
 
+TMM_HEADER = ["Track name", "Artist name", "Album", "Playlist name", "Type", "ISRC", "Spotify - id"]
+
+
+def _tmm_clean(artist, title):
+    artist = re.sub(r"^[+?]\s*", "", artist).strip()           # "+ X" (layered) / "? X" (unsure)
+    for o, c in ("[]", "()"):                                   # drop unbalanced trailing brackets
+        while title.endswith(c) and title.count(c) > title.count(o):
+            title = title[:-1].rstrip()
+    return artist, title
+
+
+def export_tmm(outdir):
+    """CSV files in TuneMyMusic's own export format, one per playlist plus combined files."""
+    import shutil
+    import zipfile
+    cfg = load_config()
+    prefix = cfg["playlist_prefix"]
+    cat = build_catalog()
+    matches = load_json("matches.json", {})
+    order = priority_order(cat)
+    if os.path.isdir(outdir):
+        shutil.rmtree(outdir)
+    os.makedirs(os.path.join(outdir, "genres"))
+    os.makedirs(os.path.join(outdir, "monthly"))
+
+    def row(k, pname):
+        t = cat[k]
+        a, ti = _tmm_clean(t["artist"], t["title"])
+        m = matches.get(k, {})
+        sid = m["uri"].split(":")[-1] if m.get("status") == "auto" and m.get("uri") else ""
+        return [ti, a, "", pname, "Playlist", "", sid]
+
+    def write(path, rows):
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f, quoting=csv.QUOTE_ALL)
+            w.writerow(TMM_HEADER)
+            w.writerows(rows)
+
+    def slug(s):
+        return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")
+
+    summary = []
+    genre_rows, month_rows = [], []
+    for g in list(BUCKETS) + [None]:
+        name = f"{prefix} {g or 'Other'}"
+        rows = [row(k, name) for k in order if cat[k]["genre"] == g]
+        write(os.path.join(outdir, "genres", f"rinse-fm-{slug(g or 'other')}.csv"), rows)
+        genre_rows += rows
+        summary.append(("genre", name, len(rows)))
+    months = sorted({m for t in cat.values() for m in t["months"]})
+    for mo in months:
+        name = f"{prefix} {mo}"
+        keys = sorted((k for k in order if cat[k]["months"].get(mo)), key=lambda k: -cat[k]["months"][mo])
+        rows = [row(k, name) for k in keys]
+        write(os.path.join(outdir, "monthly", f"rinse-fm-{mo}.csv"), rows)
+        month_rows += rows
+        summary.append(("month", name, len(rows)))
+    write(os.path.join(outdir, "rinse-fm-all-genres.csv"), genre_rows)
+    write(os.path.join(outdir, "rinse-fm-all-monthly.csv"), month_rows)
+    zpath = os.path.join(os.path.dirname(outdir.rstrip("/")), "rinse-fm-tunemymusic.zip")
+    with zipfile.ZipFile(zpath, "w", zipfile.ZIP_DEFLATED) as z:
+        for base, _, files in os.walk(outdir):
+            for fn in sorted(files):
+                p = os.path.join(base, fn)
+                z.write(p, os.path.relpath(p, os.path.dirname(outdir.rstrip("/"))))
+    return summary, zpath
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "stats"
     code = 0
@@ -268,6 +337,12 @@ def main():
         checkpoint("sync playlists")
     elif cmd == "export":
         export()
+    elif cmd == "tmm":
+        out = arg("--out", os.path.join(ROOT, "exports", "rinse-fm-tunemymusic"))
+        summary, zpath = export_tmm(out)
+        for kind, name, n in summary:
+            print(f"{kind:5s} {n:6d}  {name}")
+        print("zip:", zpath)
     elif cmd == "update":
         mixesdb.crawl()
         checkpoint("weekly update: crawl")
